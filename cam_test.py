@@ -1,10 +1,77 @@
-#!/usr/bin/env python
 
-from picamera.array import PiRGBArray
-from picamera import PiCamera
-import numpy as np
 import cv2
+
+import numpy as np
+# cap = cv2.VideoCapture(0) #카몌라 불러오기
+
+# if cap.isOpened() == False: #카메라 열림 확인
+#     exit()
+
+# while True :
+#     ret, img = cap.read() #카메라 읽기
+    
+#     cv2.imshow('preview', img) #읽은 이미지 보여주기
+    
+#     if cv2.waitKey(10) >= 0 : #10ms간 대기, 입력이 있으면 종료
+#         break
+
+# # 연결 끊기
+# cap.release()
+# cv2.destroyAllWindows()
+
 import time
+from Motor import *            
+
+from Ultrasonic import *
+
+
+PWM=Motor()
+ultrasonic=Ultrasonic()    
+
+def forward():
+    PWM.setMotorModel(1000, 1000, 1000, 1000)  # Forward
+    print("The car is moving forward")
+    time.sleep(1)
+def backward():
+    PWM.setMotorModel(-1000, -1000, -1000, -1000)  # Back
+    print("The car is going backwards")
+    time.sleep(1)
+def left():
+    PWM.setMotorModel(-1500, -1500, 2000, 2000)  # Left
+    print("The car is turning left")
+    time.sleep(1)
+def right():
+    PWM.setMotorModel(2000, 2000, -1500, -1500)  # Right
+    print("The car is turning right")
+    time.sleep(1)
+def stop():
+    PWM.setMotorModel(0, 0, 0, 0)  # Stop
+
+def alphabot_nav(x, y):
+    d = ultrasonic.get_distance()
+    print("distance: %s"%d)
+    if d >30:
+        if x>65:
+            print("move right")
+            right()
+            time.sleep(0.1)
+            stop()
+        elif x<35:
+            print("move left")
+            left()
+            time.sleep(0.1)
+            stop()
+        else:
+            print("move forward")
+            forward()
+            time.sleep(0.1)
+            stop()
+    else:
+        print("stop")
+        stop()
+
+
+
 
 def read_rgb_image(image_name, show):
     rgb_image = cv2.imread(image_name)
@@ -22,9 +89,6 @@ def filter_color(rgb_image, lower_bound_color, upper_bound_color):
 
     return mask
 
-
-    
-
 def getContours(binary_image):     
     #_, contours, hierarchy = cv2.findContours(binary_image, 
     #                                          cv2.RETR_TREE, 
@@ -36,6 +100,7 @@ def getContours(binary_image):
 
 
 def draw_ball_contour(binary_image, rgb_image, contours):
+    global gx, gy
     black_image = np.zeros([binary_image.shape[0], binary_image.shape[1],3],'uint8')
     
     for c in contours:
@@ -46,11 +111,16 @@ def draw_ball_contour(binary_image, rgb_image, contours):
             cv2.drawContours(rgb_image, [c], -1, (150,250,150), 1)
             cv2.drawContours(black_image, [c], -1, (150,250,150), 1)
             cx, cy = get_contour_center(c)
-            print("cx : ", str(cx/640), "cy : ", str(cy/480) )
+            # print(cx, cy)
+            gx = cx
+            gy = cy
             cv2.circle(rgb_image, (cx,cy),(int)(radius),(0,0,255),1)
             cv2.circle(black_image, (cx,cy),(int)(radius),(0,0,255),1)
             cv2.circle(black_image, (cx,cy),5,(150,150,255),-1)
             #print ("Area: {}, Perimeter: {}".format(area, perimeter))
+        else:
+            gx = -100
+            gy = -100
     #print ("number of contours: {}".format(len(contours)))
     cv2.imshow("RGB Image Contours",rgb_image)
     cv2.imshow("Black Image Contours",black_image)
@@ -74,46 +144,24 @@ def detect_ball_in_a_frame(image_frame):
 
 
 
+
 def main():
+    video_capture = cv2.VideoCapture(0)
+    # video_capture = cv2.VideoCapture('video/tennis-ball-video.mp4')
+    width  = video_capture.get(3)  # float `width`
+    height = video_capture.get(4)
 
-    # initialize the camera and grab a reference to the raw camera capture
-    camera = PiCamera()
-    camera.resolution = (640, 480)
-    camera.framerate = 32
-    rawCapture = PiRGBArray(camera, size=(640, 480))
-
-    # allow the camera to warmup
-    time.sleep(0.1)
-
-
-    # video_capture = cv2.VideoCapture(0)
-    video_capture = cv2.VideoCapture('src/topic03_perception/video/tennis-ball-video.mp4')
-
-    # while(True):
-    #     ret, frame = video_capture.read()
-    #     detect_ball_in_a_frame(frame)
-    #     time.sleep(0.033)
-    #     if cv2.waitKey(1) & 0xFF == ord('q'):
-    #         break
-
-
-    for frame in camera.capture_continuous(rawCapture, format="bgr", use_video_port=True):
-        # grab the raw NumPy array representing the image, then initialize the timestamp
-        # and occupied/unoccupied text
-
-        detect_ball_in_a_frame(frame.array)
+    while(True):
+        ret, frame = video_capture.read()
+        detect_ball_in_a_frame(frame)
         time.sleep(0.033)
-
-        # image = frame.array
-        # # show the frame
-        # cv2.imshow("Frame", image)
-        key = cv2.waitKey(1) & 0xFF
-        # clear the stream in preparation for the next frame
-        rawCapture.truncate(0)
-
-        # if the `q` key was pressed, break from the loop
-        if key == ord("q"):
+        if gx>0:
+            print((gx/width) * 100 , (gy/height) * 100)
+            alphabot_nav((gx/width) * 100, 0)
+        
+        if cv2.waitKey(1) & 0xFF == ord('q'):
             break
+
     cv2.waitKey(0)
     cv2.destroyAllWindows()
 
